@@ -1,0 +1,87 @@
+{% extends 'issues/base.html' %}
+{% block content %}
+<style>
+    .issue-form p {
+        margin-bottom: 1.25rem;
+        display: flex;
+        flex-direction: column;
+    }
+    .issue-form label {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #334155;
+        margin-bottom: 0.35rem;
+    }
+    .issue-form input[type="text"],
+    .issue-form select,
+    .issue-form textarea {
+        width: 100%;
+        padding: 0.75rem 1rem;
+        border: 1px solid #cbd5e1;
+        border-radius: 0.75rem;
+        font-size: 0.875rem;
+        outline: none;
+        background-color: #f8fafc;
+        color: #1e293b;
+        transition: all 0.2s ease-in-out;
+    }
+    .issue-form textarea {
+        min-height: 120px;
+        resize: vertical;
+    }
+    .issue-form select {
+        cursor: pointer;
+    }
+    .issue-form input[type="text"]:focus,
+    .issue-form select:focus,
+    .issue-form textarea:focus {
+        border-color: #4f46e5;
+        background-color: #ffffff;
+        box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+    }
+    .issue-form .helptext {
+        display: none !important;
+    }
+    .issue-form .errorlist {
+        color: #e11d48;
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-bottom: 0.4rem;
+        list-style: none;
+        padding: 0;
+    }
+</style>
+
+<div class="max-w-2xl mx-auto bg-white p-8 sm:p-10 rounded-3xl shadow-sm border border-slate-200 my-6">
+    <div class="mb-8">
+        <a href="{% url 'issue_list' %}" class="inline-flex items-center text-sm font-semibold text-slate-500 hover:text-indigo-600 transition mb-4">
+            &larr; Back to Home Feed
+        </a>
+        <div class="flex items-center space-x-3">
+            <div class="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center text-xl">
+                📢
+            </div>
+            <div>
+                <h1 class="text-2xl font-black text-slate-900 tracking-tight">Report a Community Issue</h1>
+                <p class="text-slate-500 text-sm mt-0.5">Share details about local hazards, maintenance, or infrastructure needs.</p>
+            </div>
+        </div>
+    </div>
+
+    <form method="POST">
+        {% csrf_token %}
+        <div class="issue-form">
+            {{ form.as_p }}
+        </div>
+
+        <div class="flex items-center justify-end space-x-3 pt-6 border-t border-slate-100 mt-6">
+            <a href="{% url 'issue_list' %}" class="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-semibold text-sm hover:bg-slate-50 transition">
+                Cancel
+            </a>
+            <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-xl font-bold transition shadow-sm text-sm cursor-pointer">
+                Submit Issue
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

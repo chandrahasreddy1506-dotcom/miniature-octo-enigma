@@ -1,0 +1,173 @@
+from django.shortcuts import render, get_object_or_404, redirect
+from django.contrib import messages
+from django.db.models import Q
+from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth import login
+from django.contrib.auth.decorators import login_required
+from .models import Issue, Comment, Ward, IssueStatusLog
+from .forms import IssueForm, CommentForm
+
+
+def issue_list(request):
+    query = request.GET.get('q', '')
+    category = request.GET.get('category', '')
+    status = request.GET.get('status', '')
+    ward_id = request.GET.get('ward', '')
+    sort_by = request.GET.get('sort', 'newest')
+    
+    issues = Issue.objects.all()
+    
+    if query:
+        issues = issues.filter(
+            Q(title__icontains=query) | 
+            Q(description__icontains=query) | 
+            Q(location__icontains=query)
+        )
+    if category:
+        issues = issues.filter(category=category)
+    if status:
+        issues = issues.filter(status=status)
+    if ward_id:
+        issues = issues.filter(community__ward_id=ward_id)
+
+    # Apply dynamic sorting
+    if sort_by == 'upvotes':
+        issues = issues.order_by('-upvotes', '-created_at')
+    elif sort_by == 'oldest':
+        issues = issues.order_by('created_at')
+    else:
+        issues = issues.order_by('-created_at')
+
+    total_count = Issue.objects.count()
+    reported_count = Issue.objects.filter(status='reported').count()
+    in_progress_count = Issue.objects.filter(status='in_progress').count()
+    resolved_count = Issue.objects.filter(status='resolved').count()
+
+    wards = Ward.objects.all()
+        
+    context = {
+        'issues': issues,
+        'query': query,
+        'selected_category': category,
+        'selected_status': status,
+        'selected_ward': ward_id,
+        'selected_sort': sort_by,
+        'wards': wards,
+        'total_count': total_count,
+        'reported_count': reported_count,
+        'in_progress_count': in_progress_count,
+        'resolved_count': resolved_count,
+    }
+    return render(request, 'issues/home.html', context)
+
+
+def issue_detail(request, pk):
+    issue = get_object_or_404(Issue, pk=pk)
+    comments = issue.comments.all().order_by('-created_at')
+    
+    if request.method == 'POST':
+        form = CommentForm(request.POST)
+        if form.is_valid():
+            comment = form.save(commit=False)
+            comment.issue = issue
+            if request.user.is_authenticated:
+                comment.author = request.user
+            comment.save()
+            messages.success(request, 'Your comment has been added.')
+            return redirect('issue_detail', pk=issue.pk)
+    else:
+        form = CommentForm()
+        
+    context = {
+        'issue': issue,
+        'comments': comments,
+        'form': form,
+    }
+    return render(request, 'issues/issue_detail.html', context)
+
+
+def create_issue(request):
+    if request.method == 'POST':
+        form = IssueForm(request.POST)
+        if form.is_valid():
+            issue = form.save(commit=False)
+            if request.user.is_authenticated:
+                issue.author = request.user
+            issue.save()
+            messages.success(request, f'Issue "{issue.title}" was submitted successfully!')
+            return redirect('issue_list')
+    else:
+        form = IssueForm()
+    return render(request, 'issues/create_issue.html', {'form': form})
+
+
+@login_required
+def upvote_issue(request, pk):
+    issue = get_object_or_404(Issue, pk=pk)
+    
+    if issue.upvoted_by.filter(id=request.user.id).exists():
+        issue.upvoted_by.remove(request.user)
+        issue.upvotes = max(0, issue.upvotes - 1)
+        issue.save()
+        messages.info(request, f'You removed your upvote from "{issue.title}".')
+    else:
+        issue.upvoted_by.add(request.user)
+        issue.upvotes += 1
+        issue.save()
+        messages.success(request, f'Thanks! Your upvote for "{issue.title}" has been recorded.')
+        
+    next_url = request.META.get('HTTP_REFERER')
+    if next_url:
+        return redirect(next_url)
+    return redirect('issue_detail', pk=issue.pk)
+
+
+@login_required
+def update_issue_status(request, pk):
+    if request.method == 'POST':
+        issue = get_object_or_404(Issue, pk=pk)
+        
+        if request.user == issue.author or request.user.is_staff:
+            new_status = request.POST.get('status')
+            valid_statuses = dict(issue.STATUS_CHOICES).keys()
+            
+            if new_status in valid_statuses:
+                if new_status != issue.status:
+                    old_status = issue.status
+                    issue.status = new_status
+                    issue.save()
+
+                    IssueStatusLog.objects.create(
+                        issue=issue,
+                        changed_by=request.user,
+                        old_status=old_status,
+                        new_status=new_status
+                    )
+                    messages.success(request, f'Status successfully updated to "{issue.get_status_display()}".')
+                else:
+                    messages.info(request, 'No change in status.')
+            else:
+                messages.error(request, 'Invalid status selected.')
+        else:
+            messages.error(request, "You do not have permission to change this issue's status.")
+            
+    return redirect('issue_detail', pk=pk)
+
+
+def register_view(request):
+    if request.method == 'POST':
+        form = UserCreationForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            login(request, user)
+            messages.success(request, f'Welcome to Talk & Solve, {user.username}!')
+            return redirect('user_dashboard')
+    else:
+        form = UserCreationForm()
+    return render(request, 'issues/register.html', {'form': form})
+
+
+@login_required
+def user_dashboard(request):
+    user_issues = Issue.objects.filter(author=request.user).order_by('-created_at')
+    return render(request, 'issues/dashboard.html', {'issues': user_issues})
