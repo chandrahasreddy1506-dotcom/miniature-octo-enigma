@@ -1,0 +1,6 @@
+[
+  "automation/api_tests/test_web_endpoints.py::test_home_page_available",
+  "automation/api_tests/test_web_endpoints.py::test_issue_detail_page_available_or_not_found",
+  "automation/api_tests/test_web_endpoints.py::test_login_page_available",
+  "automation/api_tests/test_web_endpoints.py::test_register_page_available"
+]

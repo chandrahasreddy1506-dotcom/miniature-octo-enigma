@@ -1,0 +1,69 @@
+name: CI-CD
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+  workflow_dispatch:
+
+jobs:
+  test-and-quality:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install app dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install automation dependencies
+        run: pip install -r automation/requirements-automation.txt
+
+      - name: Django checks
+        env:
+          DJANGO_DEBUG: "False"
+          DJANGO_SECRET_KEY: "ci-secret-key-not-for-production"
+          DJANGO_ALLOWED_HOSTS: "127.0.0.1,localhost,testserver"
+          DJANGO_CSRF_TRUSTED_ORIGINS: "http://127.0.0.1,http://localhost"
+        run: python manage.py check --deploy
+
+      - name: Django tests
+        run: python manage.py test
+
+      - name: Start Django server
+        run: |
+          python manage.py migrate
+          nohup python manage.py runserver 127.0.0.1:8000 > runserver.log 2>&1 &
+          sleep 5
+
+      - name: API tests
+        env:
+          BASE_URL: "http://127.0.0.1:8000"
+        run: pytest automation/api_tests -q
+
+      - name: Performance smoke tests
+        env:
+          BASE_URL: "http://127.0.0.1:8000"
+          PERF_ITERATIONS: "10"
+          PERF_THRESHOLD_MS: "1500"
+        run: python automation/performance_tests/smoke_performance.py
+
+  optional-deploy:
+    if: ${{ github.ref == 'refs/heads/main' && secrets.PYTHONANYWHERE_USERNAME != '' && secrets.PYTHONANYWHERE_API_TOKEN != '' && secrets.PYTHONANYWHERE_DOMAIN != '' }}
+    needs: test-and-quality
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Trigger PythonAnywhere reload (optional)
+        run: |
+          curl -X POST "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PYTHONANYWHERE_USERNAME }}/webapps/${{ secrets.PYTHONANYWHERE_DOMAIN }}/reload/" \
+            -H "Authorization: Token ${{ secrets.PYTHONANYWHERE_API_TOKEN }}"
