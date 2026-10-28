@@ -1,0 +1,171 @@
+{% extends 'issues/base.html' %}
+{% block content %}
+<div class="max-w-5xl mx-auto w-full overflow-hidden">
+    <!-- Header Banner -->
+    <div class="bg-gradient-to-r from-indigo-600 to-blue-600 rounded-3xl p-6 sm:p-8 text-white shadow-xl mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+        <div class="space-y-1">
+            <h1 class="text-2xl sm:text-3xl font-black tracking-tight">Community Issue Tracker</h1>
+            <p class="text-indigo-100 text-xs sm:text-sm max-w-xl">Report local issues, upvote critical priorities, and collaborate with neighbors and local authorities for quick resolutions.</p>
+        </div>
+        <a href="{% url 'create_issue' %}" class="bg-white text-indigo-600 px-5 py-2.5 rounded-2xl font-bold shadow-md hover:bg-indigo-50 transition text-sm whitespace-nowrap self-stretch md:self-auto text-center">
+            + Report New Issue
+        </a>
+    </div>
+
+    <!-- Live Platform Statistics -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-6">
+        <!-- Total Reports -->
+        <a href="{% url 'issue_list' %}" class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition flex items-center justify-between group">
+            <div>
+                <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Reports</p>
+                <p class="text-xl sm:text-2xl font-black text-slate-900 mt-1">{{ total_count }}</p>
+            </div>
+            <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center text-base sm:text-lg font-bold group-hover:bg-slate-200 transition">
+                📊
+            </div>
+        </a>
+
+        <!-- Reported -->
+        <a href="{% url 'issue_list' %}?status=reported" class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition flex items-center justify-between group">
+            <div>
+                <p class="text-[11px] font-bold text-blue-600 uppercase tracking-wider">Reported</p>
+                <p class="text-xl sm:text-2xl font-black text-slate-900 mt-1">{{ reported_count }}</p>
+            </div>
+            <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-base sm:text-lg font-bold group-hover:bg-blue-100 transition">
+                📬
+            </div>
+        </a>
+
+        <!-- In Progress -->
+        <a href="{% url 'issue_list' %}?status=in_progress" class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition flex items-center justify-between group">
+            <div>
+                <p class="text-[11px] font-bold text-amber-600 uppercase tracking-wider">In Progress</p>
+                <p class="text-xl sm:text-2xl font-black text-slate-900 mt-1">{{ in_progress_count }}</p>
+            </div>
+            <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-base sm:text-lg font-bold group-hover:bg-amber-100 transition">
+                ⏳
+            </div>
+        </a>
+
+        <!-- Resolved -->
+        <a href="{% url 'issue_list' %}?status=resolved" class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition flex items-center justify-between group">
+            <div>
+                <p class="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">Resolved</p>
+                <p class="text-xl sm:text-2xl font-black text-slate-900 mt-1">{{ resolved_count }}</p>
+            </div>
+            <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-base sm:text-lg font-bold group-hover:bg-emerald-100 transition">
+                ✅
+            </div>
+        </a>
+    </div>
+
+    <!-- Responsive Multi-Tier Search & Filter Form -->
+    <form method="GET" class="bg-white p-5 rounded-3xl shadow-sm border border-slate-200 mb-8 space-y-3">
+        <!-- Row 1: Full-Width Search Input -->
+        <div class="w-full">
+            <input type="text" name="q" value="{{ query }}" placeholder="Search by keyword, street, or landmark..." 
+                class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-slate-50/50 focus:bg-white transition">
+        </div>
+
+        <!-- Row 2: Responsive Dropdown Grid -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+            <!-- Ward Dropdown -->
+            <select name="ward" class="w-full min-w-0 px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs sm:text-sm bg-white cursor-pointer truncate">
+                <option value="">All Regions / Wards</option>
+                {% for ward in wards %}
+                <option value="{{ ward.id }}" {% if selected_ward == ward.id|stringformat:"s" %}selected{% endif %}>
+                    Ward {{ ward.ward_number }} - {{ ward.name }}
+                </option>
+                {% endfor %}
+            </select>
+
+            <!-- Category Dropdown -->
+            <select name="category" class="w-full min-w-0 px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs sm:text-sm bg-white cursor-pointer truncate">
+                <option value="">All Categories</option>
+                <option value="road" {% if selected_category == 'road' %}selected{% endif %}>Roads & Footpaths</option>
+                <option value="water" {% if selected_category == 'water' %}selected{% endif %}>Water Supply</option>
+                <option value="sewage" {% if selected_category == 'sewage' %}selected{% endif %}>Drainage & Sewage</option>
+                <option value="garbage" {% if selected_category == 'garbage' %}selected{% endif %}>Garbage & Sanitation</option>
+                <option value="electricity" {% if selected_category == 'electricity' %}selected{% endif %}>Streetlights & Power</option>
+                <option value="traffic" {% if selected_category == 'traffic' %}selected{% endif %}>Traffic & Parking</option>
+                <option value="parks" {% if selected_category == 'parks' %}selected{% endif %}>Parks & Greenery</option>
+                <option value="health" {% if selected_category == 'health' %}selected{% endif %}>Public Health & Pest Control</option>
+                <option value="safety" {% if selected_category == 'safety' %}selected{% endif %}>Public Safety & Vandalism</option>
+                <option value="other" {% if selected_category == 'other' %}selected{% endif %}>Other / General</option>
+            </select>
+
+            <!-- Status Dropdown -->
+            <select name="status" class="w-full min-w-0 px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs sm:text-sm bg-white cursor-pointer truncate">
+                <option value="">All Statuses</option>
+                <option value="reported" {% if selected_status == 'reported' %}selected{% endif %}>Reported</option>
+                <option value="in_progress" {% if selected_status == 'in_progress' %}selected{% endif %}>In Progress</option>
+                <option value="resolved" {% if selected_status == 'resolved' %}selected{% endif %}>Resolved</option>
+            </select>
+
+            <!-- Actions: Submit & Reset -->
+            <div class="flex items-center gap-2">
+                <button type="submit" class="flex-grow bg-slate-900 hover:bg-slate-800 text-white py-2 px-4 rounded-xl font-semibold text-xs sm:text-sm transition shadow-sm cursor-pointer whitespace-nowrap text-center">
+                    Filter Feed
+                </button>
+                {% if query or selected_category or selected_status or selected_ward %}
+                <a href="{% url 'issue_list' %}" class="px-3 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 font-semibold text-xs sm:text-sm transition text-center whitespace-nowrap">
+                    Reset
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </form>
+
+    <!-- Issue Feed Cards -->
+    <div class="space-y-4">
+        {% for issue in issues %}
+        <div class="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md transition flex flex-col sm:flex-row justify-between items-start gap-4">
+            <div class="space-y-2 flex-grow min-w-0 w-full sm:w-auto">
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="bg-indigo-50 text-indigo-700 text-xs font-semibold px-3 py-1 rounded-full uppercase tracking-wider">
+                        {{ issue.get_category_display }}
+                    </span>
+                    {% if issue.community %}
+                        <span class="bg-slate-100 text-slate-700 text-xs font-semibold px-2.5 py-0.5 rounded-full truncate max-w-[200px]" title="{{ issue.community.name }}">
+                            🏘️ {{ issue.community.name }}
+                        </span>
+                        <span class="text-xs text-indigo-600 font-medium whitespace-nowrap">
+                            (Ward {{ issue.community.ward.ward_number }})
+                        </span>
+                    {% endif %}
+                    <span class="text-xs text-slate-500 font-medium truncate max-w-[180px]">📍 {{ issue.location }}</span>
+                    <span class="text-xs text-slate-400 whitespace-nowrap">• {{ issue.created_at|date:"M d, Y" }}</span>
+                    
+                    {% if issue.status == 'resolved' %}
+                        <span class="bg-emerald-50 text-emerald-700 text-xs font-semibold px-2.5 py-0.5 rounded-full">Resolved</span>
+                    {% elif issue.status == 'in_progress' %}
+                        <span class="bg-amber-50 text-amber-700 text-xs font-semibold px-2.5 py-0.5 rounded-full">In Progress</span>
+                    {% else %}
+                        <span class="bg-blue-50 text-blue-700 text-xs font-semibold px-2.5 py-0.5 rounded-full">Reported</span>
+                    {% endif %}
+                </div>
+                
+                <a href="{% url 'issue_detail' issue.pk %}" class="text-lg font-bold text-slate-900 hover:text-indigo-600 transition block break-words">
+                    {{ issue.title }}
+                </a>
+                <p class="text-slate-600 text-sm line-clamp-2 leading-relaxed break-words">{{ issue.description }}</p>
+            </div>
+
+            <!-- Upvote Widget -->
+            <div class="flex sm:flex-col items-center justify-between sm:justify-center bg-slate-50 border border-slate-200 p-3 rounded-2xl sm:min-w-[80px] w-full sm:w-auto shrink-0">
+                <a href="{% url 'upvote_issue' issue.pk %}" class="text-indigo-600 font-extrabold text-lg hover:scale-125 transition">▲</a>
+                <span class="text-base font-extrabold text-slate-800">{{ issue.upvotes }}</span>
+                <span class="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Votes</span>
+            </div>
+        </div>
+        {% empty %}
+        <div class="text-center py-16 bg-white rounded-3xl border border-slate-200">
+            <div class="text-4xl mb-3">📭</div>
+            <p class="text-slate-700 font-semibold text-lg mb-1">No issues found</p>
+            <p class="text-slate-400 text-sm mb-4">No community issues match the selected search criteria.</p>
+            <a href="{% url 'create_issue' %}" class="inline-block bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-semibold text-sm shadow-md hover:bg-indigo-700 transition">+ Report Issue</a>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

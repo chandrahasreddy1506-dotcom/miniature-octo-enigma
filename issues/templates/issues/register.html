@@ -1,0 +1,74 @@
+{% extends 'issues/base.html' %}
+{% block content %}
+<style>
+    .auth-form p {
+        margin-bottom: 1.25rem;
+        display: flex;
+        flex-direction: column;
+    }
+    .auth-form label {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #334155;
+        margin-bottom: 0.35rem;
+    }
+    .auth-form input[type="text"],
+    .auth-form input[type="password"] {
+        width: 100%;
+        padding: 0.75rem 1rem;
+        border: 1px solid #cbd5e1;
+        border-radius: 0.75rem;
+        font-size: 0.875rem;
+        outline: none;
+        background-color: #f8fafc;
+        transition: all 0.2s ease-in-out;
+    }
+    .auth-form input[type="text"]:focus,
+    .auth-form input[type="password"]:focus {
+        border-color: #4f46e5;
+        background-color: #ffffff;
+        box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+    }
+    /* Hide the verbose Django password requirement bullets */
+    .auth-form .helptext {
+        display: none !important;
+    }
+    .auth-form .errorlist {
+        color: #e11d48;
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-bottom: 0.4rem;
+        list-style: none;
+        padding: 0;
+    }
+</style>
+
+<div class="max-w-md mx-auto bg-white p-8 sm:p-10 rounded-3xl shadow-sm border border-slate-200 my-8">
+    <div class="text-center mb-6">
+        <div class="inline-flex items-center justify-center w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl text-xl mb-3">
+            ✨
+        </div>
+        <h1 class="text-2xl font-black text-slate-900 tracking-tight">Create Account</h1>
+        <p class="text-slate-500 text-sm mt-1">Get started with Talk & Solve</p>
+    </div>
+    
+    <form method="POST">
+        {% csrf_token %}
+        <div class="auth-form">
+            {{ form.as_p }}
+        </div>
+        
+        <p class="text-xs text-slate-400 mt-2 mb-4">
+            Must be at least 8 characters. Do not use common or purely numeric passwords.
+        </p>
+
+        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl font-bold transition shadow-sm text-sm cursor-pointer">
+            Sign Up
+        </button>
+    </form>
+    
+    <p class="text-center text-sm text-slate-500 mt-6">
+        Already have an account? <a href="{% url 'login' %}" class="text-indigo-600 font-semibold hover:underline">Log in</a>
+    </p>
+</div>
+{% endblock %}
