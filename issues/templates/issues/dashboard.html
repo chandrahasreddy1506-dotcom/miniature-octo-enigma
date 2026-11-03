@@ -1,112 +1,206 @@
-{% extends 'issues/base.html' %}
-{% block content %}
-<div class="max-w-5xl mx-auto space-y-8">
-    <!-- Dashboard Header & Profile Banner -->
-    <div class="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-        <div class="flex items-center space-x-4">
-            <div class="w-16 h-16 rounded-2xl bg-indigo-600 text-white flex items-center justify-center text-2xl font-bold shadow-md shadow-indigo-200">
-                {{ user.username|first|upper }}
-            </div>
-            <div>
-                <div class="flex items-center gap-2">
-                    <h1 class="text-2xl font-black text-slate-900 tracking-tight">{{ user.username }}</h1>
-                    <span class="text-xs font-semibold bg-indigo-50 text-indigo-700 px-2.5 py-0.5 rounded-full">Community Contributor</span>
-                </div>
-                <p class="text-slate-500 text-sm mt-0.5">Manage and track your reported community issues.</p>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Talk & Solve — Civic Operations Portal</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        .kpi-card { border: none; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        .badge-submitted { background-color: #f59e0b; color: white; }
+        .badge-inprogress { background-color: #3b82f6; color: white; }
+        .badge-resolved { background-color: #10b981; color: white; }
+        .track-link { text-decoration: none; font-weight: 600; color: #0d6efd; }
+        .track-link:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark py-3">
+    <div class="container">
+        <a class="navbar-brand fw-bold" href="{% url 'dashboard' %}">🏛️ Talk & Solve</a>
+        <div class="d-flex align-items-center gap-2">
+            <button type="button" class="btn btn-warning btn-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#grievanceModal">
+                + Report Grievance
+            </button>
+
+            {% if user.is_authenticated %}
+                <span class="text-light ms-2 me-2 small">Signed in as <strong>{{ user.username }}</strong></span>
+                {% if user.is_staff %}
+                    <a href="/admin/" class="btn btn-outline-light btn-sm" target="_blank">Staff Admin</a>
+                {% endif %}
+                <a href="{% url 'export_csv' %}" class="btn btn-success btn-sm">📥 Export CSV</a>
+                <form action="{% url 'logout' %}" method="POST" class="d-inline m-0">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline-danger btn-sm">Log Out</button>
+                </form>
+            {% else %}
+                <a href="{% url 'login' %}" class="btn btn-outline-light btn-sm">Log In</a>
+                <a href="{% url 'register' %}" class="btn btn-primary btn-sm">Sign Up</a>
+            {% endif %}
+        </div>
+    </div>
+</nav>
+
+<div class="container py-4">
+    <!-- KPI Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card kpi-card p-3 bg-white">
+                <span class="text-muted small text-uppercase fw-semibold">Total Logged</span>
+                <h2 class="fw-bold text-dark mt-1 mb-0">{{ total_count }}</h2>
             </div>
         </div>
-
-        <div class="flex items-center gap-3 w-full md:w-auto">
-            <a href="{% url 'create_issue' %}" class="w-full md:w-auto text-center bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-sm transition">
-                + Report New Issue
-            </a>
+        <div class="col-md-3">
+            <div class="card kpi-card p-3 bg-white">
+                <span class="text-muted small text-uppercase fw-semibold">New / Submitted</span>
+                <h2 class="fw-bold text-warning mt-1 mb-0">{{ submitted_count }}</h2>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card kpi-card p-3 bg-white">
+                <span class="text-muted small text-uppercase fw-semibold">In Progress</span>
+                <h2 class="fw-bold text-primary mt-1 mb-0">{{ in_progress_count }}</h2>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card kpi-card p-3 bg-white">
+                <span class="text-muted small text-uppercase fw-semibold">Resolved</span>
+                <h2 class="fw-bold text-success mt-1 mb-0">{{ resolved_count }}</h2>
+            </div>
         </div>
     </div>
 
-    <!-- Quick Stats Bar -->
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
-            <div>
-                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Reported</p>
-                <p class="text-2xl font-black text-slate-900 mt-1">{{ issues.count }}</p>
+    <!-- Track Grievance Status -->
+    <div class="card border-0 shadow-sm p-4 mb-4 bg-white rounded-3">
+        <h5 class="fw-bold mb-2">Track Complaint Status</h5>
+        <form method="GET" class="row g-2 align-items-center">
+            <div class="col-md-8">
+                <input type="text" name="track_id" class="form-control" placeholder="Enter Tracking ID (e.g. TS-59CCAC87)" value="{{ search_query }}">
             </div>
-            <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg font-bold">
-                📋
+            <div class="col-md-4">
+                <button type="submit" class="btn btn-primary w-100">Check Status</button>
             </div>
-        </div>
+        </form>
 
-        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
-            <div>
-                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Platform Status</p>
-                <p class="text-sm font-bold text-emerald-600 mt-2">Active Member</p>
-            </div>
-            <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg font-bold">
-                ✓
-            </div>
+        {% if tracked_issue %}
+        <div class="alert alert-info mt-3 mb-0">
+            <strong>Found Issue:</strong> {{ tracked_issue.tracking_id }} — {{ tracked_issue.title }}<br>
+            <strong>Department:</strong> {{ tracked_issue.department }} | 
+            <strong>Location:</strong> {{ tracked_issue.location }} | 
+            <strong>Status:</strong> 
+            {% if tracked_issue.status|lower == 'submitted' %}
+                <span class="badge badge-submitted">Submitted</span>
+            {% elif tracked_issue.status|lower == 'in progress' %}
+                <span class="badge badge-inprogress">In Progress</span>
+            {% else %}
+                <span class="badge badge-resolved">Resolved</span>
+            {% endif %}
+            <br>
+            <span class="small text-muted"><strong>Description:</strong> {{ tracked_issue.description }}</span>
         </div>
-
-        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
-            <div>
-                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Quick Filter</p>
-                <a href="{% url 'issue_list' %}" class="text-sm font-semibold text-indigo-600 hover:underline mt-2 block">
-                    Browse All Feed &rarr;
-                </a>
-            </div>
-            <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-lg font-bold">
-                🔍
-            </div>
+        {% elif search_query %}
+        <div class="alert alert-warning mt-3 mb-0">
+            No record found for tracking ID "{{ search_query }}".
         </div>
+        {% endif %}
     </div>
 
-    <!-- My Reported Issues Section -->
-    <div class="space-y-4">
-        <div class="flex items-center justify-between px-1">
-            <h2 class="text-lg font-bold text-slate-900">My Submissions</h2>
-            <span class="text-xs text-slate-500 font-medium">{{ issues.count }} issue{{ issues.count|pluralize }} filed</span>
+    <!-- Civic Issues Table -->
+    <div class="card border-0 shadow-sm bg-white rounded-3">
+        <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+            <h5 class="fw-bold mb-0">Recent Civic Reports</h5>
+            <button type="button" class="btn btn-warning btn-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#grievanceModal">
+                + Report Grievance
+            </button>
         </div>
-
-        {% for issue in issues %}
-        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition flex flex-col sm:flex-row justify-between items-start gap-4">
-            <div class="space-y-2 flex-grow">
-                <div class="flex flex-wrap items-center gap-2">
-                    <span class="bg-indigo-50 text-indigo-700 text-xs font-semibold px-3 py-1 rounded-full uppercase tracking-wider">
-                        {{ issue.get_category_display }}
-                    </span>
-                    <span class="text-xs text-slate-500 font-medium">📍 {{ issue.location }}</span>
-                    <span class="text-xs text-slate-400">• {{ issue.created_at|date:"M d, Y" }}</span>
-
-                    {% if issue.status == 'resolved' %}
-                        <span class="bg-emerald-50 text-emerald-700 text-xs font-semibold px-2.5 py-0.5 rounded-full">Resolved</span>
-                    {% elif issue.status == 'in_progress' %}
-                        <span class="bg-amber-50 text-amber-700 text-xs font-semibold px-2.5 py-0.5 rounded-full">In Progress</span>
-                    {% else %}
-                        <span class="bg-blue-50 text-blue-700 text-xs font-semibold px-2.5 py-0.5 rounded-full">Reported</span>
-                    {% endif %}
-                </div>
-
-                <a href="{% url 'issue_detail' issue.pk %}" class="text-lg font-bold text-slate-900 hover:text-indigo-600 transition block">
-                    {{ issue.title }}
-                </a>
-                <p class="text-slate-600 text-sm line-clamp-2 leading-relaxed">{{ issue.description }}</p>
-            </div>
-
-            <!-- Upvote Stat Badge -->
-            <div class="flex sm:flex-col items-center justify-between sm:justify-center bg-slate-50 border border-slate-200 p-3 rounded-2xl sm:min-w-[80px] w-full sm:w-auto">
-                <span class="text-indigo-600 font-extrabold text-sm">▲</span>
-                <span class="text-base font-extrabold text-slate-800">{{ issue.upvotes }}</span>
-                <span class="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Votes</span>
-            </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Tracking ID (Click to Track)</th>
+                        <th>Title</th>
+                        <th>Department</th>
+                        <th>Location</th>
+                        <th>Status</th>
+                        <th>Reported</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for issue in issues %}
+                    <tr>
+                        <td>
+                            <a href="?track_id={{ issue.tracking_id }}" class="track-link">
+                                {{ issue.tracking_id|default:"Pending" }}
+                            </a>
+                        </td>
+                        <td class="fw-semibold">{{ issue.title }}</td>
+                        <td><span class="badge bg-light text-dark border">{{ issue.department }}</span></td>
+                        <td>{{ issue.location|default:"Not specified" }}</td>
+                        <td>
+                            {% if issue.status|lower == 'submitted' %}
+                                <span class="badge badge-submitted">Submitted</span>
+                            {% elif issue.status|lower == 'in progress' %}
+                                <span class="badge badge-inprogress">In Progress</span>
+                            {% else %}
+                                <span class="badge badge-resolved">Resolved</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-muted small">{{ issue.created_at|date:"M d, Y" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center py-4 text-muted">No civic reports filed yet. Click "+ Report Grievance" above to file one.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
-        {% empty %}
-        <div class="text-center py-16 bg-white rounded-3xl border border-slate-200">
-            <div class="text-4xl mb-3">📭</div>
-            <h3 class="text-slate-800 font-bold text-lg mb-1">No issues reported yet</h3>
-            <p class="text-slate-500 text-sm max-w-sm mx-auto mb-5">You haven't submitted any community issues yet. Post your first report to start tracking its resolution progress.</p>
-            <a href="{% url 'create_issue' %}" class="inline-block bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-sm transition">
-                + Report Your First Issue
-            </a>
-        </div>
-        {% endfor %}
     </div>
 </div>
-{% endblock %}
+
+<!-- Modal: Grievance Submission -->
+<div class="modal fade" id="grievanceModal" tabindex="-1" aria-labelledby="grievanceModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title fw-bold" id="grievanceModalLabel">Report a Civic Grievance</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{% url 'dashboard' %}" method="POST">
+                {% csrf_token %}
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Issue Title *</label>
+                        {{ form.title }}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Department *</label>
+                        {{ form.department }}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Location / Landmark *</label>
+                        {{ form.location }}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Contact Phone Number (Optional)</label>
+                        {{ form.citizen_phone }}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Description *</label>
+                        {{ form.description }}
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning fw-semibold">Submit Complaint</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

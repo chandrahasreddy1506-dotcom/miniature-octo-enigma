@@ -1,99 +1,40 @@
+import uuid
 from django.db import models
-from django.contrib.auth.models import User
-
-
-class Ward(models.Model):
-    name = models.CharField(max_length=100)
-    ward_number = models.PositiveIntegerField(unique=True)
-    zone = models.CharField(max_length=100, default='East Zone')
-
-    class Meta:
-        ordering = ['ward_number']
-
-    def __str__(self):
-        return f"Ward {self.ward_number} - {self.name}"
-
-
-class Community(models.Model):
-    ward = models.ForeignKey(Ward, on_delete=models.CASCADE, related_name='communities')
-    name = models.CharField(max_length=150)
-    postal_code = models.CharField(max_length=20, blank=True)
-
-    class Meta:
-        verbose_name_plural = 'Communities'
-        ordering = ['name']
-
-    def __str__(self):
-        return f"{self.name} ({self.ward.name})"
-
 
 class Issue(models.Model):
-    CATEGORY_CHOICES = [
-        ('road', 'Roads & Footpaths'),
-        ('water', 'Water Supply'),
-        ('sewage', 'Drainage & Sewage'),
-        ('garbage', 'Garbage & Sanitation'),
-        ('electricity', 'Streetlights & Power'),
-        ('traffic', 'Traffic & Parking'),
-        ('parks', 'Parks & Greenery'),
-        ('health', 'Public Health & Pest Control'),
-        ('safety', 'Public Safety & Vandalism'),
-        ('other', 'Other / General'),
-    ]
-
     STATUS_CHOICES = [
-        ('reported', 'Reported'),
-        ('in_progress', 'In Progress'),
-        ('resolved', 'Resolved'),
+        ('Submitted', 'Submitted'),
+        ('In Progress', 'In Progress'),
+        ('Resolved', 'Resolved'),
     ]
 
+    DEPARTMENT_CHOICES = [
+        ('Roads & Infrastructure', 'Roads & Infrastructure'),
+        ('Electricity & Lighting', 'Electricity & Lighting'),
+        ('Sanitation & Waste', 'Sanitation & Waste'),
+        ('Water & Drainage', 'Water & Drainage'),
+        ('General Civic', 'General Civic'),
+    ]
+
+    tracking_id = models.CharField(max_length=20, unique=True, null=True, blank=True, db_index=True)
     title = models.CharField(max_length=200)
     description = models.TextField()
-    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default='other')
-    location = models.CharField(max_length=200)
-    community = models.ForeignKey(
-        Community,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='issues'
-    )
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='reported')
-    upvotes = models.PositiveIntegerField(default=0)
-    upvoted_by = models.ManyToManyField(User, related_name='upvoted_issues', blank=True)
-    author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='issues', null=True, blank=True)
+    department = models.CharField(max_length=50, choices=DEPARTMENT_CHOICES, default='General Civic')
+    location = models.CharField(max_length=200, blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Submitted')
+    citizen_name = models.CharField(max_length=100, default='Anonymous')
+    citizen_phone = models.CharField(max_length=15, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    class Meta:
-        ordering = ['-created_at']
+    def save(self, *args, **kwargs):
+        if not self.tracking_id:
+            for _ in range(5):
+                candidate = "TS-" + uuid.uuid4().hex[:8].upper()
+                if not Issue.objects.filter(tracking_id=candidate).exists():
+                    self.tracking_id = candidate
+                    break
+        super().save(*args, **kwargs)
 
     def __str__(self):
-        return self.title
-
-
-class Comment(models.Model):
-    issue = models.ForeignKey(Issue, on_delete=models.CASCADE, related_name='comments')
-    author = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
-    content = models.TextField()
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ['created_at']
-
-    def __str__(self):
-        return f"Comment on {self.issue.title}"
-
-
-class IssueStatusLog(models.Model):
-    issue = models.ForeignKey(Issue, on_delete=models.CASCADE, related_name='status_logs')
-    changed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
-    old_status = models.CharField(max_length=20, choices=Issue.STATUS_CHOICES)
-    new_status = models.CharField(max_length=20, choices=Issue.STATUS_CHOICES)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ['-created_at']
-
-    def __str__(self):
-        return f"{self.issue.title}: {self.old_status} -> {self.new_status} by {self.changed_by}"
+        return f"[{self.tracking_id}] {self.title} - {self.status}"

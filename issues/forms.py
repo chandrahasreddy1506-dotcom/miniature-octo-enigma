@@ -1,33 +1,26 @@
+import re
 from django import forms
-from .models import Issue, Comment, Community
-
+from .models import Issue
 
 class IssueForm(forms.ModelForm):
+    citizen_phone = forms.CharField(
+        required=False,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': '10-digit mobile number (Optional)'})
+    )
+
     class Meta:
         model = Issue
-        fields = ['title', 'category', 'community', 'location', 'description']
+        fields = ['title', 'department', 'location', 'citizen_phone', 'description']
         widgets = {
-            'title': forms.TextInput(attrs={'placeholder': 'Brief summary of the issue'}),
-            'location': forms.TextInput(attrs={'placeholder': 'Street, landmark, or specific junction'}),
-            'description': forms.Textarea(attrs={'rows': 4, 'placeholder': 'Detailed description of what needs attention...'}),
+            'title': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g., Broken water pipe on Main Road', 'required': True}),
+            'department': forms.Select(attrs={'class': 'form-select', 'required': True}),
+            'location': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g., 3rd Cross, near Community Hall', 'required': True}),
+            'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': 'Describe the civic problem in detail...', 'required': True}),
         }
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields['community'].empty_label = "Select Community / Neighborhood"
-        self.fields['community'].required = False
-
-
-class CommentForm(forms.ModelForm):
-    class Meta:
-        model = Comment
-        fields = ['content']
-        widgets = {
-            'content': forms.Textarea(attrs={
-                'rows': 3,
-                'placeholder': 'Share an update, progress report, or note...',
-            }),
-        }
-        labels = {
-            'content': 'Add a Comment',
-        }
+    def clean_citizen_phone(self):
+        phone = (self.cleaned_data.get('citizen_phone') or '').strip()
+        if phone:
+            if not re.match(r'^\+?[0-9]{10,15}$', phone):
+                raise forms.ValidationError("Enter a valid phone number (10 to 15 digits).")
+        return phone

@@ -1,163 +1,83 @@
-from django.shortcuts import render, get_object_or_404, redirect
-from django.contrib import messages
-from django.db.models import Q
+import csv
+from django.shortcuts import render, redirect
+from django.http import HttpResponse
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
-from .models import Issue, Comment, Ward, IssueStatusLog
-from .forms import IssueForm, CommentForm
+from .models import Issue
+from .forms import IssueForm
 
+def sanitize_csv_cell(value):
+    val_str = str(value or '')
+    if val_str.startswith(('=', '+', '-', '@', '\t', '\r')):
+        return f"'{val_str}"
+    return val_str
 
-def issue_list(request):
-    query = request.GET.get('q', '')
-    category = request.GET.get('category', '')
-    status = request.GET.get('status', '')
-    ward_id = request.GET.get('ward', '')
-    
-    issues = Issue.objects.all().order_by('-created_at')
-    
-    if query:
-        issues = issues.filter(
-            Q(title__icontains=query) | 
-            Q(description__icontains=query) | 
-            Q(location__icontains=query)
-        )
-    if category:
-        issues = issues.filter(category=category)
-    if status:
-        issues = issues.filter(status=status)
-    if ward_id:
-        issues = issues.filter(community__ward_id=ward_id)
-
-    total_count = Issue.objects.count()
-    reported_count = Issue.objects.filter(status='reported').count()
-    in_progress_count = Issue.objects.filter(status='in_progress').count()
-    resolved_count = Issue.objects.filter(status='resolved').count()
-
-    wards = Ward.objects.all()
-        
-    context = {
-        'issues': issues,
-        'query': query,
-        'selected_category': category,
-        'selected_status': status,
-        'selected_ward': ward_id,
-        'wards': wards,
-        'total_count': total_count,
-        'reported_count': reported_count,
-        'in_progress_count': in_progress_count,
-        'resolved_count': resolved_count,
-    }
-    return render(request, 'issues/home.html', context)
-
-
-def issue_detail(request, pk):
-    issue = get_object_or_404(Issue, pk=pk)
-    comments = issue.comments.all().order_by('-created_at')
-    
-    if request.method == 'POST':
-        form = CommentForm(request.POST)
-        if form.is_valid():
-            comment = form.save(commit=False)
-            comment.issue = issue
-            if request.user.is_authenticated:
-                comment.author = request.user
-            comment.save()
-            messages.success(request, 'Your comment has been added.')
-            return redirect('issue_detail', pk=issue.pk)
-    else:
-        form = CommentForm()
-        
-    context = {
-        'issue': issue,
-        'comments': comments,
-        'form': form,
-    }
-    return render(request, 'issues/issue_detail.html', context)
-
-
-def create_issue(request):
+@login_required
+def issue_dashboard(request):
     if request.method == 'POST':
         form = IssueForm(request.POST)
         if form.is_valid():
             issue = form.save(commit=False)
-            if request.user.is_authenticated:
-                issue.author = request.user
+            issue.citizen_name = request.user.username
+            issue.status = 'Submitted'
             issue.save()
-            messages.success(request, f'Issue "{issue.title}" was submitted successfully!')
-            return redirect('issue_list')
+            return redirect('dashboard')
     else:
         form = IssueForm()
-    return render(request, 'issues/create_issue.html', {'form': form})
 
+    issues = Issue.objects.all().order_by('-created_at')
+
+    total_count = issues.count()
+    submitted_count = issues.filter(status__iexact='Submitted').count()
+    in_progress_count = issues.filter(status__iexact='In Progress').count()
+    resolved_count = issues.filter(status__iexact='Resolved').count()
+
+    search_query = request.GET.get('track_id', '').strip()[:20]
+    tracked_issue = None
+    if search_query:
+        tracked_issue = Issue.objects.filter(tracking_id__iexact=search_query).first()
+
+    context = {
+        'issues': issues,
+        'form': form,
+        'total_count': total_count,
+        'submitted_count': submitted_count,
+        'in_progress_count': in_progress_count,
+        'resolved_count': resolved_count,
+        'tracked_issue': tracked_issue,
+        'search_query': search_query,
+    }
+    return render(request, 'issues/dashboard.html', context)
 
 @login_required
-def upvote_issue(request, pk):
-    issue = get_object_or_404(Issue, pk=pk)
-    
-    if issue.upvoted_by.filter(id=request.user.id).exists():
-        issue.upvoted_by.remove(request.user)
-        issue.upvotes = max(0, issue.upvotes - 1)
-        issue.save()
-        messages.info(request, f'You removed your upvote from "{issue.title}".')
-    else:
-        issue.upvoted_by.add(request.user)
-        issue.upvotes += 1
-        issue.save()
-        messages.success(request, f'Thanks! Your upvote for "{issue.title}" has been recorded.')
-        
-    next_url = request.META.get('HTTP_REFERER')
-    if next_url:
-        return redirect(next_url)
-    return redirect('issue_detail', pk=issue.pk)
+def export_issues_csv(request):
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = 'attachment; filename="talk_and_solve_report.csv"'
 
+    writer = csv.writer(response)
+    writer.writerow(['Tracking ID', 'Title', 'Department', 'Location', 'Status', 'Date Reported'])
 
-@login_required
-def update_issue_status(request, pk):
-    if request.method == 'POST':
-        issue = get_object_or_404(Issue, pk=pk)
-        
-        if request.user == issue.author or request.user.is_staff:
-            new_status = request.POST.get('status')
-            valid_statuses = dict(issue.STATUS_CHOICES).keys()
-            
-            if new_status in valid_statuses:
-                if new_status != issue.status:
-                    old_status = issue.status
-                    issue.status = new_status
-                    issue.save()
-
-                    IssueStatusLog.objects.create(
-                        issue=issue,
-                        changed_by=request.user,
-                        old_status=old_status,
-                        new_status=new_status
-                    )
-                    messages.success(request, f'Status successfully updated to "{issue.get_status_display()}".')
-                else:
-                    messages.info(request, 'No change in status.')
-            else:
-                messages.error(request, 'Invalid status selected.')
-        else:
-            messages.error(request, "You do not have permission to change this issue's status.")
-            
-    return redirect('issue_detail', pk=pk)
-
+    for issue in Issue.objects.all().order_by('-created_at'):
+        writer.writerow([
+            sanitize_csv_cell(issue.tracking_id),
+            sanitize_csv_cell(issue.title),
+            sanitize_csv_cell(issue.department),
+            sanitize_csv_cell(issue.location),
+            sanitize_csv_cell(issue.status),
+            issue.created_at.strftime('%Y-%m-%d %H:%M')
+        ])
+    return response
 
 def register_view(request):
+    if request.user.is_authenticated:
+        return redirect('dashboard')
     if request.method == 'POST':
         form = UserCreationForm(request.POST)
         if form.is_valid():
             user = form.save()
             login(request, user)
-            messages.success(request, f'Welcome to Talk & Solve, {user.username}!')
-            return redirect('user_dashboard')
+            return redirect('dashboard')
     else:
         form = UserCreationForm()
-    return render(request, 'issues/register.html', {'form': form})
-
-
-@login_required
-def user_dashboard(request):
-    user_issues = Issue.objects.filter(author=request.user).order_by('-created_at')
-    return render(request, 'issues/dashboard.html', {'issues': user_issues})
+    return render(request, 'registration/register.html', {'form': form})
