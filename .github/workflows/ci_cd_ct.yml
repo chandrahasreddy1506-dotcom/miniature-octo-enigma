@@ -55,7 +55,7 @@ jobs:
           token = os.environ['PA_API_TOKEN'].strip()
           domain = f"{username}.pythonanywhere.com"
 
-          # 1. Trigger remote pull, migrations, and WSGI reload via webhook
+          # 1. Remote pull, migrations, and reload via Django webhook
           print(f"--> [1/2] Triggering remote git pull & reload on {domain}...")
           webhook_url = f"https://{domain}/deploy-webhook/?token=TalkAndSolveDeployKey2026"
           req_hook = urllib.request.Request(webhook_url, headers={'User-Agent': 'GitHub-Actions-CD'})
@@ -65,7 +65,7 @@ jobs:
           except Exception as e:
               print(f"Webhook response: {e}")
 
-          # 2. Call PythonAnywhere reload API
+          # 2. Reload Webapp via PythonAnywhere API
           print(f"--> [2/2] Reloading Webapp {domain} via PythonAnywhere API...")
           headers = {
               "Authorization": f"Token {token}",
