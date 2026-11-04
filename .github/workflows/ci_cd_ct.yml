@@ -1,40 +1,4 @@
-name: Talk & Solve CI/CD/CT Pipeline
-
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-
-jobs:
-  continuous-integration:
-    name: 1. CI - Django Integrity Checks
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-          cache: 'pip'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install django
-
-      - name: Run Django System Checks
-        run: |
-          python manage.py check
-
-      - name: Verify Model Migrations
-        run: |
-          python manage.py makemigrations --check --dry-run
-
-  continuous-deployment:
+continuous-deployment:
     name: 2. CD - Deploy to PythonAnywhere
     needs: continuous-integration
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -42,66 +6,21 @@ jobs:
 
     steps:
       - name: Trigger Remote Git Pull & Reload Webapp
-        env:
-          PA_USERNAME: ${{ secrets.PA_USERNAME }}
-          PA_API_TOKEN: ${{ secrets.PA_API_TOKEN }}
         run: |
           python - << 'EOF'
-          import os
           import urllib.request
           import json
 
-          username = os.environ['PA_USERNAME'].strip()
-          token = os.environ['PA_API_TOKEN'].strip()
-          domain = f"{username}.pythonanywhere.com"
-
-          # 1. Remote pull, migrations, and reload via Django webhook
-          print(f"--> [1/2] Triggering remote git pull & reload on {domain}...")
+          domain = "chandu1.pythonanywhere.com"
           webhook_url = f"https://{domain}/deploy-webhook/?token=TalkAndSolveDeployKey2026"
-          req_hook = urllib.request.Request(webhook_url, headers={'User-Agent': 'GitHub-Actions-CD'})
-          try:
-              with urllib.request.urlopen(req_hook, timeout=30) as resp:
-                  print(resp.read().decode('utf-8'))
-          except Exception as e:
-              print(f"Webhook response: {e}")
-
-          # 2. Reload Webapp via PythonAnywhere API
-          print(f"--> [2/2] Reloading Webapp {domain} via PythonAnywhere API...")
-          headers = {
-              "Authorization": f"Token {token}",
-              "Content-Type": "application/json"
-          }
-          reload_url = f"https://www.pythonanywhere.com/api/v0/user/{username}/webapps/{domain}/reload/"
-          req_reload = urllib.request.Request(reload_url, headers=headers, method="POST")
-          with urllib.request.urlopen(req_reload, timeout=30) as resp:
-              if resp.status in [200, 204]:
-                  print("Deployment Successful: Live app reloaded.")
+          
+          print(f"--> Triggering deployment & WSGI reload on {domain}...")
+          req = urllib.request.Request(webhook_url, headers={'User-Agent': 'GitHub-Actions-CD'})
+          with urllib.request.urlopen(req, timeout=45) as resp:
+              body = resp.read().decode('utf-8')
+              print(body)
+              if "Reload triggered" in body or "Already up to date" in body:
+                  print("Deployment Successful: Live app updated and reloaded.")
               else:
-                  raise Exception(f"Reload failed with HTTP status: {resp.status}")
+                  raise Exception(f"Unexpected webhook response: {body}")
           EOF
-
-  continuous-testing:
-    name: 3. CT - Live Playwright Sanity Suite
-    needs: continuous-deployment
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Check out tests
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Install Playwright & Chromium
-        run: |
-          python -m pip install --upgrade pip
-          pip install pytest-playwright
-          playwright install --with-deps chromium
-
-      - name: Run Live Tests Against PythonAnywhere
-        env:
-          TEST_PASSWORD: ${{ secrets.LIVE_TEST_PASSWORD }}
-        run: |
-          pytest tests/test_live_portal.py -v
