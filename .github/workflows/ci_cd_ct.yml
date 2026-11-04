@@ -1,0 +1,128 @@
+name: Talk & Solve CI/CD/CT Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  continuous-integration:
+    name: 1. CI - Django Integrity Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install django
+
+      - name: Run Django System Checks
+        run: |
+          python manage.py check
+
+      - name: Verify Model Migrations
+        run: |
+          python manage.py makemigrations --check --dry-run
+
+  continuous-deployment:
+    name: 2. CD - Deploy to PythonAnywhere
+    needs: continuous-integration
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via PythonAnywhere REST API
+        env:
+          PA_USERNAME: ${{ secrets.PA_USERNAME }}
+          PA_API_TOKEN: ${{ secrets.PA_API_TOKEN }}
+        run: |
+          python - << 'EOF'
+          import os
+          import time
+          import urllib.request
+          import json
+
+          username = os.environ['PA_USERNAME']
+          token = os.environ['PA_API_TOKEN']
+          domain = f"{username}.pythonanywhere.com"
+          headers = {
+              "Authorization": f"Token {token}",
+              "Content-Type": "application/json"
+          }
+
+          print("--> [1/3] Creating Bash console on PythonAnywhere...")
+          req = urllib.request.Request(
+              f"https://www.pythonanywhere.com/api/v0/user/{username}/consoles/",
+              data=json.dumps({"executable": "bash"}).encode('utf-8'),
+              headers=headers,
+              method="POST"
+          )
+          with urllib.request.urlopen(req) as resp:
+              console = json.loads(resp.read().decode('utf-8'))
+              console_id = console['id']
+
+          print(f"--> [2/3] Pulling latest code and migrating in console #{console_id}...")
+          command = (
+              "cd ~/miniature-octo-enigma && "
+              "git fetch origin main && git reset --hard origin/main && "
+              "source ~/.virtualenvs/myenv/bin/activate && "
+              "python manage.py migrate && exit\n"
+          )
+          req_input = urllib.request.Request(
+              f"https://www.pythonanywhere.com/api/v0/user/{username}/consoles/{console_id}/send_input/",
+              data=json.dumps({"input": command}).encode('utf-8'),
+              headers=headers,
+              method="POST"
+          )
+          urllib.request.urlopen(req_input)
+
+          time.sleep(15)
+
+          print("--> [3/3] Reloading Web Application...")
+          req_reload = urllib.request.Request(
+              f"https://www.pythonanywhere.com/api/v0/user/{username}/webapps/{domain}/reload/",
+              headers=headers,
+              method="POST"
+          )
+          with urllib.request.urlopen(req_reload) as resp:
+              if resp.status in [200, 204]:
+                  print("Deployment Successful: Live app reloaded.")
+              else:
+                  raise Exception(f"Reload failed with status: {resp.status}")
+          EOF
+
+  continuous-testing:
+    name: 3. CT - Live Playwright Sanity Suite
+    needs: continuous-deployment
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out tests
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Playwright & Chromium
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest-playwright
+          playwright install --with-deps chromium
+
+      - name: Run Live Tests Against PythonAnywhere
+        env:
+          TEST_PASSWORD: ${{ secrets.LIVE_TEST_PASSWORD }}
+        run: |
+          pytest tests/test_live_portal.py -v
