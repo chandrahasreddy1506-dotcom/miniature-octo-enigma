@@ -1,5 +1,6 @@
 import csv
 import subprocess
+from pathlib import Path
 from django.conf import settings
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
@@ -112,16 +113,33 @@ def export_csv(request):
 
 @csrf_exempt
 def deploy_webhook(request):
-    """Secure endpoint triggered by GitHub Actions CD to pull code and migrate."""
+    """Secure endpoint triggered by GitHub Actions CD to pull code, migrate, and reload."""
     token = request.GET.get("token")
     if token != "TalkAndSolveDeployKey2026":
         return HttpResponseForbidden("Unauthorized")
 
+    # 1. Pull latest code from GitHub
     pull_proc = subprocess.run(
         ["git", "pull", "origin", "main"],
         cwd=settings.BASE_DIR,
         capture_output=True,
         text=True
     )
+
+    # 2. Run database migrations
     call_command("migrate")
-    return HttpResponse(f"Deployment output:\n{pull_proc.stdout}", content_type="text/plain")
+
+    # 3. Trigger immediate webapp reload on PythonAnywhere
+    wsgi_file = Path("/var/www/chandu1_pythonanywhere_com_wsgi.py")
+    if wsgi_file.exists():
+        wsgi_file.touch()
+
+    return HttpResponse(
+        f"Deployment output:\n{pull_proc.stdout}\nReload triggered via WSGI touch.",
+        content_type="text/plain"
+    )
+
+
+# Backward compatibility aliases
+issue_dashboard = dashboard
+export_issues_csv = export_csv
